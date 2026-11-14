@@ -11,7 +11,8 @@ const ITEMS = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  if (pathname === "/signin") return null;
+  // Hidden where it would get in the way: sign-in, and the session (rest bar lives there)
+  if (pathname === "/signin" || pathname.startsWith("/session")) return null;
   return (
     <nav className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
       <ul className="mx-auto flex max-w-xl">

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { BottomNav } from "@shared/components/BottomNav";
 import { ServiceWorker } from "@shared/components/ServiceWorker";
+import { SyncLoop } from "@shared/components/SyncLoop";
 import { APP } from "@shared/config/app";
 import "./globals.css";
 
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="mx-auto max-w-xl px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-28">{children}</main>
         <BottomNav />
         <ServiceWorker />
+        <SyncLoop />
       </body>
     </html>
   );

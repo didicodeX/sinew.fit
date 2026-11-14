@@ -312,6 +312,8 @@ model WorkoutSession {
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
   deletedAt     DateTime?       @db.Timestamptz(3)
+  /// Client clock of the last edit. Last-write-wins sync compares this, not server time.
+  clientUpdatedAt DateTime?     @db.Timestamptz(3)
 
   @@index([userId, date])
   @@index([userId, updatedAt])

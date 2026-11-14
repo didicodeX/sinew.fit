@@ -1,0 +1,24 @@
+import { NextResponse } from "next/server";
+import { auth } from "@lib/auth/auth";
+import { saveSessions } from "@/server/sync/save-sessions";
+import { syncPushSchema } from "@/server/sync/schemas";
+
+/** Push local sessions (web now, watchOS later). Body: { sessions: SyncSession[] }. */
+export async function POST(req: Request) {
+  const session = await auth.api.getSession({ headers: req.headers });
+  if (!session?.user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+  const parsed = syncPushSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "invalid_payload", issues: parsed.error.issues.slice(0, 10) }, { status: 400 });
+  }
+
+  const results = await saveSessions(session.user.id, parsed.data.sessions);
+  return NextResponse.json({ results });
+}
