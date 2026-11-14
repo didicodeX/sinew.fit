@@ -143,4 +143,16 @@ export interface LoggedSession {
   isDeload: boolean;
   source: "app" | "import";
   entries: LoggedEntry[];
+  /** Live-session state (device only, not synced): the running rest timer. */
+  rest?: RestTimer;
+  /** Epoch ms of the last confirmed set, used to measure real rest and breaks. */
+  lastSet?: { at: number; entryId: string };
+}
+
+export interface RestTimer {
+  /** Epoch ms when the rest started. */
+  startedAt: number;
+  durationSec: number;
+  /** Entry whose set started this rest. */
+  entryId: string;
 }

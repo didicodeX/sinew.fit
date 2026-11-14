@@ -5,3 +5,4 @@ export * from "./exercise-matching";
 export * from "./session";
 export * from "./progression";
 export * from "./program.seed";
+export * from "./session-state";

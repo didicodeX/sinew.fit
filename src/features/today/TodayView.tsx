@@ -14,6 +14,7 @@ import {
   type SessionTemplate,
 } from "@domain/index";
 import { TemplateParts } from "@features/program/TemplateParts";
+import { StartSession } from "./StartSession";
 import { cn } from "@shared/utils";
 
 const noopSubscribe = () => () => {};
@@ -77,6 +78,10 @@ export function TodayView({
           );
         })}
       </ol>
+
+      {template && selected === today ? (
+        <StartSession date={today} template={template} exercises={exercises} />
+      ) : null}
 
       {template ? (
         <TemplateParts template={template} exercises={exercises} />

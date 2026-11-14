@@ -3,7 +3,7 @@
  * - Navigations: network-first, falling back to the cached page, then to "/".
  * - API calls are never cached here; offline writes go through IndexedDB + sync.
  */
-const VERSION = "sinew-v2";
+const VERSION = "sinew-v3";
 // Pages are auth-gated, so they are cached on successful navigation, not at install
 const SHELL = ["/manifest.webmanifest", "/icon.svg"];
 
@@ -17,6 +17,33 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
+  );
+});
+
+// The page asks us to cache its offline pages once signed in (pages are auth-gated)
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "WARM" || !Array.isArray(event.data.urls)) return;
+  event.waitUntil(
+    caches.open(VERSION).then((cache) =>
+      Promise.all(
+        event.data.urls
+          .filter((u) => typeof u === "string" && u.startsWith("/"))
+          .map((u) =>
+            fetch(u, { credentials: "same-origin" })
+              .then(async (res) => {
+                if (!res.ok || res.redirected) return;
+                const html = await res.clone().text();
+                await cache.put(u, res);
+                // Also cache the hashed JS/CSS the page needs, so it boots offline
+                const assets = [...new Set(html.match(/\/_next\/static\/[^"'\s)]+/g) || [])];
+                await Promise.all(
+                  assets.map((a) => cache.match(a).then((hit) => hit || cache.add(a).catch(() => undefined))),
+                );
+              })
+              .catch(() => undefined),
+          ),
+      ),
+    ),
   );
 });
 
@@ -37,7 +64,11 @@ self.addEventListener("fetch", (event) => {
           }
           return res;
         })
-        .catch(async () => (await caches.match(req)) || (await caches.match("/")) || Response.error()),
+        .catch(async () => (await caches.match(req)) ||
+          // /session?id=… is one static page: match it without the query
+          (await caches.match(req, { ignoreSearch: true })) ||
+          (await caches.match("/")) ||
+          Response.error()),
     );
     return;
   }
