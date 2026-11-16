@@ -7,6 +7,7 @@ import { cn } from "@shared/utils";
 const ITEMS = [
   { href: "/", label: "Today" },
   { href: "/program", label: "Program" },
+  { href: "/history", label: "History" },
 ] as const;
 
 export function BottomNav() {

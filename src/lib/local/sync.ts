@@ -2,7 +2,7 @@
  * Background push of local sessions to the server. Safe to call often: runs are
  * de-duplicated, failures just leave rows dirty for the next attempt.
  */
-import { dirtySessions, markSynced, type LocalSession } from "./db";
+import { dirtySessions, getSession, markSynced, saveLocalSession, type LocalSession } from "./db";
 
 const BATCH = 10;
 let running: Promise<void> | null = null;
@@ -62,4 +62,29 @@ export function startSyncLoop(): () => void {
     document.removeEventListener("visibilitychange", onVisibility);
     window.clearInterval(timer);
   };
+}
+
+const PULL_KEY = "sinew.lastPull";
+
+/**
+ * Bring in sessions saved from other devices. A local copy that is dirty or newer is
+ * never overwritten (last-write-wins). Resolves to the number of sessions stored.
+ */
+export async function pullSessions(): Promise<number> {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return 0;
+  const since = Number(localStorage.getItem(PULL_KEY) ?? 0);
+  const res = await fetch(`/api/sync/sessions?since=${since}`);
+  if (!res.ok) return 0;
+  const { sessions } = (await res.json()) as { sessions: (Omit<LocalSession, "dirty">)[] };
+  let stored = 0;
+  let newest = since;
+  for (const s of sessions) {
+    newest = Math.max(newest, s.updatedAt);
+    const local = await getSession(s.id);
+    if (local && (local.dirty === 1 || local.updatedAt >= s.updatedAt)) continue;
+    await saveLocalSession({ ...s, dirty: 0 });
+    stored++;
+  }
+  localStorage.setItem(PULL_KEY, String(newest));
+  return stored;
 }
