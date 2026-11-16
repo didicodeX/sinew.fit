@@ -1,9 +1,15 @@
-// Applies pending Prisma migrations during the Vercel production build only.
-// Preview builds skip it so they never touch the production database.
+// Applies pending Prisma migrations during Vercel builds.
+// - production: always.
+// - preview: only when MIGRATE_PREVIEW=true, which must be set together with a
+//   Preview-only DATABASE_URL/DIRECT_URL (separate database), never the production one.
 import { execSync } from "node:child_process";
 
-if (process.env.VERCEL_ENV === "production") {
+const vercelEnv = process.env.VERCEL_ENV;
+const shouldMigrate =
+  vercelEnv === "production" || (vercelEnv === "preview" && process.env.MIGRATE_PREVIEW === "true");
+
+if (shouldMigrate) {
   execSync("prisma migrate deploy", { stdio: "inherit" });
 } else {
-  console.log(`Skipping prisma migrate deploy (VERCEL_ENV=${process.env.VERCEL_ENV ?? "unset"})`);
+  console.log(`Skipping prisma migrate deploy (VERCEL_ENV=${vercelEnv ?? "unset"})`);
 }

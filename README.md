@@ -57,3 +57,16 @@ domain module with 57 unit tests, Phase 2 program seeded as data, PWA shell, Tod
 
 Next (brief §10): create the database and run the first migration, seed the program per user, sign-in screen,
 then session mode (prefilled sets, 1-tap confirm, rest/hold timers) on top of the local-first store.
+
+## Environments
+
+| Env | Where | Branch | URL | Database |
+|---|---|---|---|---|
+| Dev | Claude Code on the web (cloud) | `claude/*` | Vercel Preview URL per push | Preview DB |
+| Test | Vercel Preview | `staging` | https://staging.sinew.fit | separate Neon branch |
+| Prod | Vercel Production | `main` | https://sinew.fit | production DB |
+
+Vercel setup (Project Settings):
+1. Domains: add `staging.sinew.fit`, assign it to Git branch `staging` (Preview).
+2. Environment Variables, scope **Preview** (branch `staging` if you want it isolated): `DATABASE_URL`, `DIRECT_URL` (Neon preview branch), `BETTER_AUTH_SECRET` (different from prod), `NEXT_PUBLIC_APP_URL=https://staging.sinew.fit`, `RESEND_API_KEY`, `EMAIL_FROM`, `MIGRATE_PREVIEW=true`, plus Gemini/Cloudinary keys if needed.
+3. Google login: add `https://staging.sinew.fit/api/auth/callback/google` to the OAuth client's redirect URIs (or skip Google on staging and use email OTP).
