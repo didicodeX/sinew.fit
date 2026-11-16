@@ -5,6 +5,7 @@ import {
   WEEKDAY_NAMES,
   type Weekday,
 } from "@domain/index";
+import Link from "next/link";
 import { AccountCard } from "@features/auth/AccountCard";
 import { TemplateParts } from "@features/program/TemplateParts";
 import { requirePageUser } from "@/server/current-user";
@@ -46,6 +47,10 @@ export default async function ProgramPage() {
       <Section title="Rules" items={TRAINING_RULES} />
       <Section title="Deload and pain" items={RECOVERY_GUIDANCE} />
       <Section title="Skill progression chains" items={chains.map((c) => `${c.name}: ${c.steps.join(" → ")}`)} />
+
+      <Link href="/exercises" className="block rounded-2xl border border-line bg-surface p-4 font-semibold">
+        Exercise library →
+      </Link>
 
       <AccountCard />
     </div>
