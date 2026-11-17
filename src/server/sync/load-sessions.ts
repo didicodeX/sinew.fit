@@ -4,16 +4,18 @@ import type { ExerciseDef, LoggedSession } from "@domain/types";
 
 export interface PulledSession extends LoggedSession {
   updatedAt: number;
+  /** Tombstone (deleted or import undone): the client hides it. */
+  deletedAt?: number;
   exerciseDefs: ExerciseDef[];
 }
 
 const opt = <T>(v: T | null): T | undefined => (v === null ? undefined : v);
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
-/** The user's non-deleted sessions changed since `since` (client clock, ms), newest first. */
-export async function loadSessions(userId: string, since = 0, limit = 200): Promise<PulledSession[]> {
+/** The user's sessions changed since `since` (ms), newest first. Deleted ones come along as tombstones. */
+export async function loadSessions(userId: string, since = 0, limit = 1000): Promise<PulledSession[]> {
   const rows = await db.workoutSession.findMany({
-    where: { userId, deletedAt: null, clientUpdatedAt: { gt: new Date(since) } },
+    where: { userId, clientUpdatedAt: { gt: new Date(since) } },
     orderBy: { date: "desc" },
     take: limit,
     include: {
@@ -49,6 +51,7 @@ export async function loadSessions(userId: string, since = 0, limit = 200): Prom
       isDeload: s.isDeload,
       source: s.source === "import" ? "import" : "app",
       updatedAt: s.clientUpdatedAt?.getTime() ?? s.updatedAt.getTime(),
+      deletedAt: s.deletedAt?.getTime(),
       exerciseDefs: [...defs.values()],
       entries: s.entries.map((e) => ({
         id: e.id,

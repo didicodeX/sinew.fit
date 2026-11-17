@@ -43,7 +43,7 @@ export const emptyBlock = (exerciseId = ""): QuickBlock => ({
   superset: "",
 });
 
-function clockToIso(date: IsoDate, hhmm: string): string | undefined {
+export function clockToIso(date: IsoDate, hhmm: string): string | undefined {
   const mins = parseClockTime(hhmm);
   if (mins === null) return undefined;
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];

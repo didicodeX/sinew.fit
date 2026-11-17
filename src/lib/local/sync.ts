@@ -67,12 +67,11 @@ export function startSyncLoop(): () => void {
 const PULL_KEY = "sinew.lastPull";
 
 /**
- * Bring in sessions saved from other devices. A local copy that is dirty or newer is
- * never overwritten (last-write-wins). Resolves to the number of sessions stored.
+ * Bring in sessions saved from other devices. Unsynced local edits are never overwritten. Resolves to the number of sessions stored.
  */
-export async function pullSessions(): Promise<number> {
+export async function pullSessions(opts: { full?: boolean } = {}): Promise<number> {
   if (typeof navigator !== "undefined" && !navigator.onLine) return 0;
-  const since = Number(localStorage.getItem(PULL_KEY) ?? 0);
+  const since = opts.full ? 0 : Number(localStorage.getItem(PULL_KEY) ?? 0);
   const res = await fetch(`/api/sync/sessions?since=${since}`);
   if (!res.ok) return 0;
   const { sessions } = (await res.json()) as { sessions: (Omit<LocalSession, "dirty">)[] };
@@ -81,10 +80,13 @@ export async function pullSessions(): Promise<number> {
   for (const s of sessions) {
     newest = Math.max(newest, s.updatedAt);
     const local = await getSession(s.id);
-    if (local && (local.dirty === 1 || local.updatedAt >= s.updatedAt)) continue;
+    // Never overwrite unsynced local edits. Otherwise the server copy wins when it differs: a synced
+    // local row means the server already has our last edit, so a different copy is a newer one
+    // (an undone import, a restore), whatever the device clock says.
+    if (local && (local.dirty === 1 || (local.updatedAt === s.updatedAt && !!local.deletedAt === !!s.deletedAt))) continue;
     await saveLocalSession({ ...s, dirty: 0 });
     stored++;
   }
-  localStorage.setItem(PULL_KEY, String(newest));
+  localStorage.setItem(PULL_KEY, String(Math.max(newest, Number(localStorage.getItem(PULL_KEY) ?? 0))));
   return stored;
 }

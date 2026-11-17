@@ -8,7 +8,11 @@ import type { SyncResult, SyncSession } from "./schemas";
  * A session is replaced as a whole: entries and sets are rewritten from the client copy.
  * Only confirmed sets are stored; prefilled-but-not-done sets live on the device only.
  */
-export async function saveSessions(userId: string, sessions: SyncSession[]): Promise<SyncResult[]> {
+export async function saveSessions(
+  userId: string,
+  sessions: SyncSession[],
+  opts: { importBatchId?: string } = {},
+): Promise<SyncResult[]> {
   const exerciseIds = [...new Set(sessions.flatMap((s) => s.entries.map((e) => e.exerciseId)))];
   const templateIds = [...new Set(sessions.flatMap((s) => (s.templateId ? [s.templateId] : [])))];
 
@@ -51,6 +55,7 @@ export async function saveSessions(userId: string, sessions: SyncSession[]): Pro
       source: s.source,
       deletedAt: s.deletedAt ? new Date(s.deletedAt) : null,
       clientUpdatedAt: new Date(s.updatedAt),
+      ...(opts.importBatchId ? { importBatchId: opts.importBatchId } : {}),
     };
 
     const entries = s.entries.map((e) => ({

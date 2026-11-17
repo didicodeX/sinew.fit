@@ -7,3 +7,4 @@ export * from "./progression";
 export * from "./program.seed";
 export * from "./session-state";
 export * from "./quick-entry";
+export * from "./import-table";
