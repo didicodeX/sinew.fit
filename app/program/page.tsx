@@ -7,6 +7,7 @@ import {
 } from "@domain/index";
 import Link from "next/link";
 import { AccountCard } from "@features/auth/AccountCard";
+import { DayControls } from "@features/program/DayControls";
 import { TemplateParts } from "@features/program/TemplateParts";
 import { requirePageUser } from "@/server/current-user";
 import { getUserProgram } from "@/server/program/get-program";
@@ -34,11 +35,10 @@ export default async function ProgramPage() {
                 <span className="w-24 text-muted">{WEEKDAY_NAMES[weekday]}</span>
                 <span className="font-semibold">{t ? t.name : "Full rest"}</span>
               </summary>
-              {t ? (
-                <div className="border-t border-line p-3">
-                  <TemplateParts template={t} exercises={exercises} editable />
-                </div>
-              ) : null}
+              <div className="border-t border-line p-3">
+                <DayControls key={t?.id ?? "rest"} weekday={weekday} current={t} templates={templates} />
+                {t ? <TemplateParts template={t} exercises={exercises} editable /> : null}
+              </div>
             </details>
           );
         })}

@@ -1,6 +1,7 @@
 import { WARMUPS, type ExerciseDef, type SessionTemplate } from "@domain/index";
 import { AddExercise } from "./AddExercise";
 import { ExerciseRow } from "./ExerciseRow";
+import { AddPart, PartControls } from "./PartControls";
 
 export function TemplateParts({
   template,
@@ -17,7 +18,7 @@ export function TemplateParts({
       {template.parts.map((part) => {
         const warmup = WARMUPS.find((w) => w.key === part.warmupKey);
         return (
-          <details key={part.name} open className="rounded-2xl border border-line bg-surface">
+          <details key={part.id ?? part.name} open className="rounded-2xl border border-line bg-surface">
             <summary className="flex items-center gap-2 px-4 py-3">
               <span className="chevron text-muted transition-transform">›</span>
               <span className="flex-1 font-semibold">{part.name}</span>
@@ -49,10 +50,12 @@ export function TemplateParts({
                 ))}
               </ol>
               {editable && part.id ? <AddExercise partId={part.id} exercises={exercises} /> : null}
+              {editable && part.id ? <PartControls key={part.name} partId={part.id} name={part.name} /> : null}
             </div>
           </details>
         );
       })}
+      {editable ? <AddPart templateId={template.id} /> : null}
     </div>
   );
 }

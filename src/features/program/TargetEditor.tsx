@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { todayIn, type ExerciseDef, type PlannedExercise } from "@domain/index";
 import { editPlannedTarget, getTargetHistory, type TargetHistoryEntry } from "@/server/program/edit-target";
 import { removePlannedExercise, swapPlannedExercise } from "@/server/program/edit-structure";
+import { moveExercise } from "@/server/program/edit-program";
 import { ExercisePicker } from "./ExercisePicker";
 
 function Stepper({ label, value, onChange, min = 0, step = 1 }: {
@@ -125,6 +126,12 @@ export function TargetEditor({ item, library, onDone }: { item: PlannedExercise;
       </div>
 
       <div className="flex items-center gap-4 border-t border-line pt-2 text-sm">
+        <button type="button" disabled={pending} className="text-accent" onClick={() => run(() => moveExercise(item.id!, "up"))}>
+          ↑
+        </button>
+        <button type="button" disabled={pending} className="text-accent" onClick={() => run(() => moveExercise(item.id!, "down"))}>
+          ↓
+        </button>
         <button type="button" className="text-accent" onClick={() => setSwapping(!swapping)}>
           Swap exercise
         </button>
@@ -139,7 +146,7 @@ export function TargetEditor({ item, library, onDone }: { item: PlannedExercise;
         )}
       </div>
       {swapping ? (
-        <ExercisePicker exercises={library} disabled={pending} onPick={(id) => run(() => swapPlannedExercise(item.id!, id))} />
+        <ExercisePicker exercises={library} disabled={pending} onPick={(id) => run(() => swapPlannedExercise(item.id!, id, todayIn()))} />
       ) : null}
       {item.id ? <History plannedId={item.id} unit={unit} /> : null}
     </div>

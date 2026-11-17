@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@lib/db";
+import { isValidIsoDate } from "@domain/dates";
 import { requirePageUser } from "@/server/current-user";
 
 export type StructureResult = { ok: true } | { ok: false; error: string };
@@ -12,25 +13,44 @@ function refresh() {
 }
 
 /** Replace the exercise of a planned row, keeping its sets, range and rest. */
-export async function swapPlannedExercise(plannedId: string, exerciseId: string): Promise<StructureResult> {
+export async function swapPlannedExercise(
+  plannedId: string,
+  exerciseId: string,
+  effectiveFrom: string,
+): Promise<StructureResult> {
+  if (!isValidIsoDate(effectiveFrom)) return { ok: false, error: "Bad date." };
   const user = await requirePageUser("/program");
   const [row, ex] = await Promise.all([
     db.plannedExercise.findFirst({
       where: { id: plannedId, part: { template: { userId: user.id } } },
-      select: { id: true },
+      select: { id: true, sets: true, targetMin: true, targetMax: true, workingTarget: true },
     }),
-    db.exercise.findFirst({ where: { id: exerciseId, userId: user.id }, select: { id: true, kind: true } }),
+    db.exercise.findFirst({ where: { id: exerciseId, userId: user.id }, select: { id: true, kind: true, name: true } }),
   ]);
   if (!row || !ex) return { ok: false, error: "Not found." };
-  await db.plannedExercise.update({
-    where: { id: row.id },
-    data: {
-      exerciseId: ex.id,
-      // A hold has seconds, a rep exercise has reps
-      targetUnit: ex.kind === "hold" ? "sec" : "reps",
-      altExerciseId: null,
-    },
-  });
+  await db.$transaction([
+    db.plannedExercise.update({
+      where: { id: row.id },
+      data: {
+        exerciseId: ex.id,
+        // A hold has seconds, a rep exercise has reps
+        targetUnit: ex.kind === "hold" ? "sec" : "reps",
+        altExerciseId: null,
+      },
+    }),
+    // Logged in the target history so the change shows up there
+    db.targetChange.create({
+      data: {
+        plannedExerciseId: row.id,
+        effectiveFrom: new Date(`${effectiveFrom}T00:00:00Z`),
+        sets: row.sets,
+        targetMin: row.targetMin,
+        targetMax: row.targetMax,
+        workingTarget: row.workingTarget,
+        reason: `Swapped to ${ex.name}`.slice(0, 200),
+      },
+    }),
+  ]);
   refresh();
   return { ok: true };
 }
