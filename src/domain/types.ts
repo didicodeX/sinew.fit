@@ -44,6 +44,8 @@ export interface Target {
 }
 
 export interface PlannedExercise {
+  /** DB id of the planned row (absent on seed data). Needed to edit targets. */
+  id?: string;
   exerciseId: string;
   sets: number;
   target: Target;

@@ -48,7 +48,7 @@ describe("DB → domain mapping", () => {
       id: templateSlug.get(t.id),
       parts: t.parts.map((p) => ({
         ...p,
-        items: p.items.map((i) => ({
+        items: p.items.map(({ id: _id, ...i }) => ({
           ...i,
           exerciseId: slugOf.get(i.exerciseId),
           altExerciseIds: i.altExerciseIds?.map((a) => slugOf.get(a)),

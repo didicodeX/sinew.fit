@@ -1,7 +1,15 @@
 import { WARMUPS, type ExerciseDef, type SessionTemplate } from "@domain/index";
 import { ExerciseRow } from "./ExerciseRow";
 
-export function TemplateParts({ template, exercises }: { template: SessionTemplate; exercises: ExerciseDef[] }) {
+export function TemplateParts({
+  template,
+  exercises,
+  editable = false,
+}: {
+  template: SessionTemplate;
+  exercises: ExerciseDef[];
+  editable?: boolean;
+}) {
   const byId = new Map(exercises.map((e) => [e.id, e]));
   return (
     <div className="space-y-3">
@@ -35,6 +43,7 @@ export function TemplateParts({ template, exercises }: { template: SessionTempla
                     item={item}
                     exercise={byId.get(item.exerciseId)}
                     index={i}
+                    editable={editable}
                   />
                 ))}
               </ol>

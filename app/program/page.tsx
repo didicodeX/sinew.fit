@@ -36,7 +36,7 @@ export default async function ProgramPage() {
               </summary>
               {t ? (
                 <div className="border-t border-line p-3">
-                  <TemplateParts template={t} exercises={exercises} />
+                  <TemplateParts template={t} exercises={exercises} editable />
                 </div>
               ) : null}
             </details>

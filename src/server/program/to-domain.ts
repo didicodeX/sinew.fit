@@ -64,6 +64,7 @@ export function toTemplates(rows: TemplateRow[]): SessionTemplate[] {
       warmupKey: p.warmupKey && WARMUP_KEYS.has(p.warmupKey) ? (p.warmupKey as WarmupKey) : undefined,
       items: p.items.map(
         (i): PlannedExercise => ({
+          id: i.id,
           exerciseId: i.exerciseId,
           sets: i.sets,
           target: { min: i.targetMin, max: opt(i.targetMax), unit: i.targetUnit },
