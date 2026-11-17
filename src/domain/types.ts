@@ -65,6 +65,8 @@ export interface PlannedExercise {
 }
 
 export interface TemplatePart {
+  /** DB id (absent on seed data). Needed to add exercises. */
+  id?: string;
   name: string;
   kind: PartKind;
   goal?: string;

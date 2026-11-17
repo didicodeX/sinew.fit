@@ -8,12 +8,13 @@ export function ExerciseRow({
   item,
   exercise,
   index,
-  editable = false,
+  library,
 }: {
   item: PlannedExercise;
   exercise?: ExerciseDef;
   index: number;
-  editable?: boolean;
+  /** When given, the row can be edited, swapped and removed. */
+  library?: ExerciseDef[];
 }) {
   const [editing, setEditing] = useState(false);
   return (
@@ -28,13 +29,13 @@ export function ExerciseRow({
           <div className="font-semibold">{formatTarget(item, exercise?.perSide)}</div>
           <div className="text-sm text-muted">{formatRest(item.restSec, item.restMaxSec)}</div>
         </div>
-        {editable && item.id && !editing ? (
+        {library && item.id && !editing ? (
           <button type="button" className="shrink-0 text-sm text-accent" onClick={() => setEditing(true)}>
             Edit
           </button>
         ) : null}
       </div>
-      {editing ? <TargetEditor item={item} onDone={() => setEditing(false)} /> : null}
+      {editing ? <TargetEditor item={item} library={library ?? []} onDone={() => setEditing(false)} /> : null}
     </li>
   );
 }

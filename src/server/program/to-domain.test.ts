@@ -46,7 +46,7 @@ describe("DB → domain mapping", () => {
     const restored = templates.map((t) => ({
       ...t,
       id: templateSlug.get(t.id),
-      parts: t.parts.map((p) => ({
+      parts: t.parts.map(({ id: _pid, ...p }) => ({
         ...p,
         items: p.items.map(({ id: _id, ...i }) => ({
           ...i,

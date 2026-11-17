@@ -58,6 +58,7 @@ export function toTemplates(rows: TemplateRow[]): SessionTemplate[] {
     id: t.id,
     name: t.name,
     parts: t.parts.map((p) => ({
+      id: p.id,
       name: p.name,
       kind: p.kind,
       goal: opt(p.goal),

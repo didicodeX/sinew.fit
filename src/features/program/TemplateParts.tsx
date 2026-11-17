@@ -1,4 +1,5 @@
 import { WARMUPS, type ExerciseDef, type SessionTemplate } from "@domain/index";
+import { AddExercise } from "./AddExercise";
 import { ExerciseRow } from "./ExerciseRow";
 
 export function TemplateParts({
@@ -43,10 +44,11 @@ export function TemplateParts({
                     item={item}
                     exercise={byId.get(item.exerciseId)}
                     index={i}
-                    editable={editable}
+                    library={editable ? exercises : undefined}
                   />
                 ))}
               </ol>
+              {editable && part.id ? <AddExercise partId={part.id} exercises={exercises} /> : null}
             </div>
           </details>
         );

@@ -18,7 +18,7 @@ const schema = z
     effectiveFrom: z.string().refine(isValidIsoDate),
   })
   .refine((v) => v.targetMax === null || v.targetMax >= v.targetMin, "max < min")
-  .refine((v) => v.restMaxSec === null || (v.restSec !== null && v.restMaxSec >= v.restSec), "rest max < min");
+  .refine((v) => v.restMaxSec === null || (v.restSec !== null && v.restMaxSec > v.restSec), "rest max <= min");
 
 export type TargetEdit = z.infer<typeof schema>;
 export type EditResult = { ok: true } | { ok: false; error: string };
@@ -70,4 +70,31 @@ export async function editPlannedTarget(plannedId: string, raw: TargetEdit): Pro
   revalidatePath("/program");
   revalidatePath("/");
   return { ok: true };
+}
+
+export interface TargetHistoryEntry {
+  id: string;
+  effectiveFrom: string;
+  sets: number;
+  targetMin: number;
+  targetMax: number | null;
+  reason: string | null;
+}
+
+/** Target history of one planned exercise, newest first. */
+export async function getTargetHistory(plannedId: string): Promise<TargetHistoryEntry[]> {
+  const user = await requirePageUser("/program");
+  const rows = await db.targetChange.findMany({
+    where: { plannedExerciseId: plannedId, plannedExercise: { part: { template: { userId: user.id } } } },
+    orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }],
+    take: 50,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    effectiveFrom: r.effectiveFrom.toISOString().slice(0, 10),
+    sets: r.sets,
+    targetMin: r.targetMin,
+    targetMax: r.targetMax,
+    reason: r.reason,
+  }));
 }
