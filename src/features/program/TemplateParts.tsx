@@ -45,6 +45,7 @@ export function TemplateParts({
                     item={item}
                     exercise={byId.get(item.exerciseId)}
                     index={i}
+                    isLast={i === part.items.length - 1}
                     library={editable ? exercises : undefined}
                   />
                 ))}
