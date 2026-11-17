@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { WEEKDAY_NAMES, weekdayOf, type LoggedSet } from "@domain/index";
-import { getSession, type LocalSession } from "@lib/local/db";
+import { useRouter } from "next/navigation";
+import { getSession, saveLocalSession, type LocalSession } from "@lib/local/db";
+import { pushNow } from "@lib/local/sync";
 
 function setLabel(s: LoggedSet): string {
   const v = `${s.value}${s.unit === "sec" ? "s" : ""}${s.side ? ` ${s.side}` : ""}`;
@@ -16,7 +18,9 @@ function setLabel(s: LoggedSet): string {
 }
 
 export function SessionDetail({ id }: { id: string }) {
+  const router = useRouter();
   const [session, setSession] = useState<LocalSession | null | undefined>(undefined);
+  const [confirm, setConfirm] = useState(false);
   useEffect(() => {
     void getSession(id).then((s) => setSession(s ?? null));
   }, [id]);
@@ -49,6 +53,19 @@ export function SessionDetail({ id }: { id: string }) {
           );
         })}
       </ul>
+      <button
+        type="button"
+        className="h-11 rounded-xl border border-line px-4 text-sm text-red-500"
+        onClick={async () => {
+          if (!confirm) return setConfirm(true);
+          const now = Date.now();
+          await saveLocalSession({ ...session, deletedAt: now, updatedAt: now, dirty: 1 });
+          void pushNow();
+          router.push("/history");
+        }}
+      >
+        {confirm ? "Confirm delete session" : "Delete session"}
+      </button>
       {session.sessionNotes ? (
         <p className="rounded-2xl border border-line bg-surface p-4 text-sm">{session.sessionNotes}</p>
       ) : null}

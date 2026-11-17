@@ -37,7 +37,12 @@ export function HistoryList() {
   const logged = sessions.filter((s) => doneSets(s) > 0);
   return (
     <div className="space-y-4">
-      <h1 className="text-3xl font-bold tracking-tight">History</h1>
+      <header className="flex items-end justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">History</h1>
+        <Link href="/import" className="h-10 rounded-xl bg-accent px-4 text-base font-semibold leading-10 text-bg">
+          Add past
+        </Link>
+      </header>
       {logged.length === 0 ? (
         <p className="rounded-2xl border border-line bg-surface p-4 text-muted">
           No sessions yet. Your first one will show up here.

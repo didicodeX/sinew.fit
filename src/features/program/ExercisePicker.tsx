@@ -4,15 +4,17 @@ import { useState } from "react";
 import { looseName, type ExerciseDef } from "@domain/index";
 
 /** Type-to-filter list of the library (retired exercises are left out). */
-export function ExercisePicker({ exercises, onPick, disabled }: {
+export function ExercisePicker({ exercises, onPick, disabled, includeArchived = false }: {
   exercises: ExerciseDef[];
   onPick: (id: string) => void;
   disabled?: boolean;
+  /** Retired exercises stay pickable when backfilling old sessions. */
+  includeArchived?: boolean;
 }) {
   const [q, setQ] = useState("");
   const f = looseName(q);
   const list = exercises
-    .filter((e) => !e.archived && (!f || [e.name, ...(e.aliases ?? [])].some((n) => looseName(n).includes(f))))
+    .filter((e) => (includeArchived || !e.archived) && (!f || [e.name, ...(e.aliases ?? [])].some((n) => looseName(n).includes(f))))
     .slice(0, 8);
   return (
     <div className="space-y-2">
