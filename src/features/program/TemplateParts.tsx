@@ -1,4 +1,5 @@
 import { WARMUPS, type ExerciseDef, type SessionTemplate } from "@domain/index";
+import { SortableExercises } from "./SortableExercises";
 import { AddExercise } from "./AddExercise";
 import { ExerciseRow } from "./ExerciseRow";
 import { AddPart, PartControls } from "./PartControls";
@@ -38,18 +39,16 @@ export function TemplateParts({
                   </ul>
                 </details>
               ) : null}
-              <ol className="divide-y divide-line">
-                {part.items.map((item, i) => (
-                  <ExerciseRow
-                    key={`${item.exerciseId}-${i}`}
-                    item={item}
-                    exercise={byId.get(item.exerciseId)}
-                    index={i}
-                    isLast={i === part.items.length - 1}
-                    library={editable ? exercises : undefined}
-                  />
-                ))}
-              </ol>
+              {editable && part.id && part.items.every((i) => i.id) ? (
+                // Remount when the server data changes so the local drag order never goes stale
+                <SortableExercises key={JSON.stringify(part.items)} partId={part.id} items={part.items} exercises={exercises} />
+              ) : (
+                <ol className="divide-y divide-line">
+                  {part.items.map((item, i) => (
+                    <ExerciseRow key={`${item.exerciseId}-${i}`} item={item} exercise={byId.get(item.exerciseId)} index={i} />
+                  ))}
+                </ol>
+              )}
               {editable && part.id ? <AddExercise partId={part.id} exercises={exercises} /> : null}
               {editable && part.id ? <PartControls key={part.name} partId={part.id} name={part.name} /> : null}
             </div>

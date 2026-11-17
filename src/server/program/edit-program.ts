@@ -17,29 +17,6 @@ function refresh() {
 
 type Dir = "up" | "down";
 
-/** Move an exercise one place within its part. (partId, order) is unique, so park one row at -1 while swapping. */
-export async function moveExercise(plannedId: string, dir: Dir): Promise<EditResult> {
-  const user = await requirePageUser("/program");
-  const row = await db.plannedExercise.findFirst({
-    where: { id: plannedId, part: { template: { userId: user.id } } },
-    select: { id: true, partId: true, order: true },
-  });
-  if (!row) return NOT_FOUND;
-  const other = await db.plannedExercise.findFirst({
-    where: { partId: row.partId, order: dir === "up" ? { lt: row.order } : { gt: row.order } },
-    orderBy: { order: dir === "up" ? "desc" : "asc" },
-    select: { id: true, order: true },
-  });
-  if (!other) return { ok: true };
-  await db.$transaction([
-    db.plannedExercise.update({ where: { id: row.id }, data: { order: -1 } }),
-    db.plannedExercise.update({ where: { id: other.id }, data: { order: row.order } }),
-    db.plannedExercise.update({ where: { id: row.id }, data: { order: other.order } }),
-  ]);
-  refresh();
-  return { ok: true };
-}
-
 export async function movePart(partId: string, dir: Dir): Promise<EditResult> {
   const user = await requirePageUser("/program");
   const row = await db.templatePart.findFirst({
@@ -150,6 +127,26 @@ export async function deleteTemplate(templateId: string): Promise<EditResult> {
   const user = await requirePageUser("/program");
   const res = await db.sessionTemplate.deleteMany({ where: { id: templateId, userId: user.id } });
   if (res.count === 0) return NOT_FOUND;
+  refresh();
+  return { ok: true };
+}
+
+/** Persist a drag-and-drop order for a part. `ids` must be exactly the part's planned rows. */
+export async function reorderExercises(partId: string, ids: string[]): Promise<EditResult> {
+  const user = await requirePageUser("/program");
+  const rows = await db.plannedExercise.findMany({
+    where: { partId, part: { template: { userId: user.id } } },
+    select: { id: true },
+  });
+  const known = new Set(rows.map((r) => r.id));
+  if (rows.length === 0 || ids.length !== rows.length || new Set(ids).size !== ids.length || ids.some((i) => !known.has(i))) {
+    return { ok: false, error: "The list changed, reload." };
+  }
+  // (partId, order) is unique: park everything on negative values, then set the final order
+  await db.$transaction([
+    ...ids.map((id, i) => db.plannedExercise.update({ where: { id }, data: { order: -(i + 1) } })),
+    ...ids.map((id, i) => db.plannedExercise.update({ where: { id }, data: { order: i } })),
+  ]);
   refresh();
   return { ok: true };
 }
