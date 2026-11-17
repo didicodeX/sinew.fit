@@ -52,6 +52,14 @@ export default async function ProgramPage() {
         Exercise library →
       </Link>
 
+      <a
+        href="/api/export"
+        download
+        className="block rounded-2xl border border-line bg-surface p-4 font-semibold"
+      >
+        Export all data (JSON) ↓
+      </a>
+
       <AccountCard />
     </div>
   );
