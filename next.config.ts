@@ -4,6 +4,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   turbopack: { root: path.resolve(__dirname) },
   serverExternalPackages: ["@prisma/client", "prisma"],
+  // Notebook photos go to a server action (resized on the device to well under this)
+  experimental: { serverActions: { bodySizeLimit: "6mb" } },
   async headers() {
     return [
       {

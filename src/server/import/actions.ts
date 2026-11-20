@@ -79,10 +79,10 @@ export async function findExistingDates(dates: string[]): Promise<string[]> {
   return [...new Set(rows.map((r) => r.date.toISOString().slice(0, 10)))];
 }
 
-export async function startBatch(sourceName: string): Promise<{ id: string }> {
+export async function startBatch(sourceName: string, kind: "file" | "photo" = "file"): Promise<{ id: string }> {
   const user = await requirePageUser("/import");
   const b = await db.importBatch.create({
-    data: { userId: user.id, kind: "file", sourceName: sourceName.slice(0, 200) || null, status: "draft" },
+    data: { userId: user.id, kind: kind === "photo" ? "photo" : "file", sourceName: sourceName.slice(0, 200) || null, status: "draft" },
     select: { id: true },
   });
   return { id: b.id };
