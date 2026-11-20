@@ -55,6 +55,7 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
   const [outcome, setOutcome] = useState<{ saved: number; skipped: number } | null>(null);
   const [zoom, setZoom] = useState<string | null>(null);
 
+  const stopRef = useRef(false);
   // Free the previews when leaving the screen (not on every change: kept photos still use them)
   const photosRef = useRef<Photo[]>([]);
   useEffect(() => {
@@ -133,17 +134,22 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
     setPhotos((p) => [...p, ...next.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
   }
 
-  async function readOne(index: number): Promise<PhotoSession[] | Failure> {
+  async function readOne(index: number, label: string): Promise<PhotoSession[] | Failure> {
     const form = new FormData();
-    const small = await shrinkPhoto(photos[index]!.file);
+    setProgress(`${label}: preparing…`);
+    const original = photos[index]!.file;
+    // Never wait forever on the device: fall back to the original file
+    const small = await withTimeout(shrinkPhoto(original), 20_000, original);
     if (small.size > 4 * 1024 * 1024 || !/^image\/(jpeg|png|webp|heic|heif)$/.test(small.type)) {
       return { index, error: "This photo could not be prepared on this device (format or size). Try a JPEG, or a screenshot of it." };
     }
     form.set("photo", small);
     form.set("index", String(index));
     form.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
+    setProgress(`${label}: reading…`);
     try {
-      const r = await readNotebookPhoto(form);
+      const r = await withTimeout(readNotebookPhoto(form), 75_000, null);
+      if (!r) return { index, error: "No answer after 75 seconds. Retry, or type it." };
       return r.ok ? r.sessions : { index, error: r.error };
     } catch (e) {
       const why = e instanceof Error && e.message ? ` (${e.message.slice(0, 120)})` : "";
@@ -156,11 +162,18 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
     setError(null);
     const read: PhotoSession[] = [];
     const failed: Failure[] = [];
+    stopRef.current = false;
     for (const [n, i] of indexes.entries()) {
-      setProgress(`Reading photo ${n + 1} of ${indexes.length}…`);
-      const r = await readOne(i);
+      if (stopRef.current) break;
+      const r = await readOne(i, `Photo ${n + 1} of ${indexes.length}`);
+      if (stopRef.current) break;
       if (Array.isArray(r)) read.push(...r);
       else failed.push(r);
+    }
+    if (stopRef.current) {
+      setProgress(null);
+      setStep("pick");
+      return;
     }
     setProgress(null);
     // Keep photo order, so page 2 follows page 1 and joins it
@@ -328,7 +341,11 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-line bg-surface p-6 text-center">
           <CameraIcon width={32} height={32} className="animate-pulse text-accent" />
           <p className="font-semibold">{progress}</p>
-          <p className="text-sm text-muted">About 5 to 15 seconds per photo. Keep this screen open.</p>
+          <p className="text-sm text-muted">About 5 to 30 seconds per photo. Keep this screen open.</p>
+          <button type="button" className="h-11 rounded-xl border border-line px-4 text-sm"
+            onClick={() => { stopRef.current = true; setProgress(null); setStep("pick"); }}>
+            Stop
+          </button>
         </div>
       ) : null}
 
@@ -518,4 +535,15 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
       ) : null}
     </div>
   );
+}
+
+/** Resolve with `fallback` if the promise takes longer than `ms`. */
+function withTimeout<T, F>(promise: Promise<T>, ms: number, fallback: F): Promise<T | F> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
 }
