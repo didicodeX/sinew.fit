@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildQuickSession,
   duplicateDates,
@@ -55,7 +55,12 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
   const [outcome, setOutcome] = useState<{ saved: number; skipped: number } | null>(null);
   const [zoom, setZoom] = useState<string | null>(null);
 
-  useEffect(() => () => photos.forEach((p) => URL.revokeObjectURL(p.url)), [photos]);
+  // Free the previews when leaving the screen (not on every change: kept photos still use them)
+  const photosRef = useRef<Photo[]>([]);
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+  useEffect(() => () => photosRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
 
   // ─── Exercise matching (automatic when the name is known, otherwise "create") ───
   const names = useMemo(() => photoExerciseNames(sessions), [sessions]);
@@ -130,14 +135,19 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
 
   async function readOne(index: number): Promise<PhotoSession[] | Failure> {
     const form = new FormData();
-    form.set("photo", await shrinkPhoto(photos[index]!.file));
+    const small = await shrinkPhoto(photos[index]!.file);
+    if (small.size > 4 * 1024 * 1024 || !/^image\/(jpeg|png|webp|heic|heif)$/.test(small.type)) {
+      return { index, error: "This photo could not be prepared on this device (format or size). Try a JPEG, or a screenshot of it." };
+    }
+    form.set("photo", small);
     form.set("index", String(index));
     form.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
     try {
       const r = await readNotebookPhoto(form);
       return r.ok ? r.sessions : { index, error: r.error };
-    } catch {
-      return { index, error: "Upload failed. Check the connection and retry." };
+    } catch (e) {
+      const why = e instanceof Error && e.message ? ` (${e.message.slice(0, 120)})` : "";
+      return { index, error: `Upload failed${why}. Check the connection and retry.` };
     }
   }
 

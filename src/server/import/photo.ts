@@ -10,7 +10,8 @@ import { requirePageUser } from "@/server/current-user";
  * the person reviews everything, then the normal import batch writes it (with undo).
  */
 
-const MAX_BYTES = 5 * 1024 * 1024;
+// Vercel rejects request bodies over 4.5 MB before the function runs
+const MAX_BYTES = 4 * 1024 * 1024;
 const TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
 const PROMPT = (today: string) => `You are reading a photo of a handwritten calisthenics training log page.
@@ -51,7 +52,7 @@ const SCHEMA = {
           end: { type: "STRING" },
           sessionNotes: { type: "STRING" },
           continuesPrevious: { type: "BOOLEAN" },
-          uncertainFields: { type: "ARRAY", items: { type: "STRING", enum: ["date", "start", "end", "sessionNotes"] } },
+          uncertainFields: { type: "ARRAY", items: { type: "STRING", format: "enum", enum: ["date", "start", "end", "sessionNotes"] } },
           exercises: {
             type: "ARRAY",
             items: {
@@ -59,14 +60,14 @@ const SCHEMA = {
               properties: {
                 name: { type: "STRING" },
                 reps: { type: "STRING" },
-                unit: { type: "STRING", enum: ["reps", "sec"] },
+                unit: { type: "STRING", format: "enum", enum: ["reps", "sec"] },
                 rest: { type: "STRING" },
                 breakAfter: { type: "STRING" },
                 notes: { type: "STRING" },
                 superset: { type: "STRING" },
                 uncertainFields: {
                   type: "ARRAY",
-                  items: { type: "STRING", enum: ["name", "reps", "rest", "breakAfter", "notes", "superset"] },
+                  items: { type: "STRING", format: "enum", enum: ["name", "reps", "rest", "breakAfter", "notes", "superset"] },
                 },
               },
               required: ["name", "reps", "unit"],
@@ -91,9 +92,9 @@ export async function readNotebookPhoto(form: FormData): Promise<PhotoReadResult
   const file = form.get("photo");
   const photo = Number(form.get("index") ?? 0);
   const timeZone = String(form.get("tz") ?? "") || undefined;
-  if (!(file instanceof File)) return { ok: false, error: "No photo received." };
-  if (!TYPES.has(file.type)) return { ok: false, error: "Use a JPEG, PNG, WebP or HEIC photo." };
-  if (file.size > MAX_BYTES) return { ok: false, error: "This photo is too large (max 5 MB)." };
+  if (!(file instanceof File)) return fail("no file in the request", "No photo received.");
+  if (!TYPES.has(file.type)) return fail(`unsupported type "${file.type}"`, "This photo format can't be read. Use a JPEG or PNG (on iPhone: Settings → Camera → Formats → Most Compatible).");
+  if (file.size > MAX_BYTES) return fail(`file too large (${file.size} bytes)`, "This photo is too large (max 4 MB).");
 
   let today: string;
   try {
@@ -104,6 +105,7 @@ export async function readNotebookPhoto(form: FormData): Promise<PhotoReadResult
 
   const model = env.GEMINI_MODEL || "gemini-flash-latest";
   const data = Buffer.from(await file.arrayBuffer()).toString("base64");
+  const started = Date.now();
   let res: Response;
   try {
     res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -113,24 +115,49 @@ export async function readNotebookPhoto(form: FormData): Promise<PhotoReadResult
         contents: [{ role: "user", parts: [{ inline_data: { mime_type: file.type, data } }, { text: PROMPT(today) }] }],
         generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: SCHEMA },
       }),
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(55_000),
     });
-  } catch {
-    return { ok: false, error: "The photo reader did not answer. Try again." };
+  } catch (e) {
+    return fail(`request failed after ${Date.now() - started} ms: ${e instanceof Error ? e.name : "unknown"}`, "The photo reader did not answer in time. Try again.");
   }
   if (!res.ok) {
-    // Status only: never log the image or the model's text
-    console.error(`photo import: Gemini responded ${res.status}`);
-    return { ok: false, error: res.status === 429 ? "Too many photos at once. Wait a minute and retry." : "The photo could not be read. Try again." };
+    // Google's error message (never the image or the model's text) says what is wrong: key, model, quota
+    const detail = await res.text().then((t) => {
+      try {
+        return String((JSON.parse(t) as { error?: { message?: string } }).error?.message ?? "").slice(0, 300);
+      } catch {
+        return t.slice(0, 300);
+      }
+    });
+    const reason =
+      res.status === 429 ? "Too many photos for the Gemini quota. Wait a minute and retry."
+      : res.status === 404 ? `The Gemini model "${model}" was not found. Set GEMINI_MODEL to a current model.`
+      : res.status === 400 && /api key/i.test(detail) ? "The Gemini key was refused. Check GEMINI_API_KEY in Vercel."
+      : res.status === 403 ? "The Gemini key is not allowed to use this model (check the key's project and billing)."
+      : `The photo reader returned an error (${res.status}). Try again.`;
+    return fail(`Gemini ${res.status} (${model}, ${Date.now() - started} ms): ${detail}`, reason);
   }
 
+  let text = "";
   try {
-    const body = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+    const body = (await res.json()) as {
+      candidates?: { finishReason?: string; content?: { parts?: { text?: string; thought?: boolean }[] } }[];
+      promptFeedback?: { blockReason?: string };
+    };
+    const cand = body.candidates?.[0];
+    text = cand?.content?.parts?.filter((p) => !p.thought).map((p) => p.text ?? "").join("") ?? "";
+    if (!text) return fail(`empty answer (finish ${cand?.finishReason ?? "none"}, block ${body.promptFeedback?.blockReason ?? "none"})`, "The photo reader returned nothing for this photo. Try again or type it.");
     const sessions = cleanPhotoRead(JSON.parse(text), Number.isInteger(photo) && photo >= 0 ? photo : 0);
-    if (!sessions.length) return { ok: false, error: "No session found on this photo." };
+    if (!sessions.length) return fail(`no session in answer (${text.length} chars)`, "No session found on this photo. Is the whole page in the picture?");
+    console.info(`photo import: read ${sessions.length} session(s) in ${Date.now() - started} ms`);
     return { ok: true, sessions };
   } catch {
-    return { ok: false, error: "The photo reader gave an answer that could not be used. Try again." };
+    return fail(`unusable answer (${text.length} chars)`, "The photo reader gave an answer that could not be used. Try again.");
   }
+}
+
+/** Log why a photo failed (never its content) and give the person a message they can act on. */
+function fail(log: string, error: string): PhotoReadResult {
+  console.error(`photo import: ${log}`);
+  return { ok: false, error };
 }
