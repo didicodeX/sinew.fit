@@ -56,6 +56,8 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
   const [zoom, setZoom] = useState<string | null>(null);
 
   const stopRef = useRef(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
   // Free the previews when leaving the screen (not on every change: kept photos still use them)
   const photosRef = useRef<Photo[]>([]);
   useEffect(() => {
@@ -307,11 +309,15 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
 
       {step === "pick" ? (
         <div className="space-y-3">
-          <label className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-line bg-surface p-6 text-center">
+          <label
+            className={`flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed bg-surface p-6 text-center ${dragging ? "border-accent" : "border-line"}`}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); addPhotos(e.dataTransfer.files); }}>
             <CameraIcon width={32} height={32} className="text-accent" />
-            <span className="font-semibold">Take or choose photos</span>
-            <span className="text-sm text-muted">One photo per session (both pages) works best. Pages of the same session are joined.</span>
-            <input type="file" accept="image/*" multiple className="sr-only" disabled={!enabled}
+            <span className="font-semibold">{photos.length ? "Add more photos" : "Take or choose photos"}</span>
+            <span className="text-sm text-muted">Tap here, or drop photos here on a computer. One photo per session (both pages) works best.</span>
+            <input ref={fileRef} type="file" accept="image/*" multiple className="sr-only"
               onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }} />
           </label>
           {photos.length ? (
@@ -330,9 +336,10 @@ export function PhotoImport({ exercises, enabled }: { exercises: ExerciseDef[]; 
             </ul>
           ) : null}
           <p className="text-sm text-muted">The photos are only read, not kept. You check every session before anything is saved.</p>
-          <button type="button" className={primary} disabled={!enabled || photos.length === 0}
-            onClick={() => void readAll(photos.map((_, i) => i))}>
-            Read {photos.length || ""} photo{photos.length === 1 ? "" : "s"}
+          {/* With no photo yet the main button opens the picker, so it is never a dead button */}
+          <button type="button" className={`${primary} flex items-center justify-center gap-2`} disabled={!enabled}
+            onClick={() => (photos.length ? void readAll(photos.map((_, i) => i)) : fileRef.current?.click())}>
+            {photos.length ? `Read ${photos.length} photo${photos.length === 1 ? "" : "s"}` : <><CameraIcon /> Choose photos</>}
           </button>
         </div>
       ) : null}
