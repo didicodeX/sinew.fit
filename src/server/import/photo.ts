@@ -12,6 +12,8 @@ import { requirePageUser } from "@/server/current-user";
 
 // Vercel rejects request bodies over 4.5 MB before the function runs
 const MAX_BYTES = 4 * 1024 * 1024;
+/** Pauses before retrying when Gemini is overloaded (503/500). */
+const RETRY_PAUSES_MS = [1_500, 4_000];
 const TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
 const PROMPT = (today: string) => `You are reading a photo of a handwritten calisthenics training log page.
@@ -106,19 +108,30 @@ export async function readNotebookPhoto(form: FormData): Promise<PhotoReadResult
   const model = env.GEMINI_MODEL || "gemini-flash-latest";
   const data = Buffer.from(await file.arrayBuffer()).toString("base64");
   const started = Date.now();
+  const body = JSON.stringify({
+    contents: [{ role: "user", parts: [{ inline_data: { mime_type: file.type, data } }, { text: PROMPT(today) }] }],
+    generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: SCHEMA },
+  });
+  // Gemini answers 503 ("high demand") or 500 when Google is overloaded: retry a couple of
+  // times with a short pause, inside one overall budget so the page never waits past its own timeout.
+  const deadline = started + 55_000;
   let res: Response;
-  try {
-    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ inline_data: { mime_type: file.type, data } }, { text: PROMPT(today) }] }],
-        generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: SCHEMA },
-      }),
-      signal: AbortSignal.timeout(55_000),
-    });
-  } catch (e) {
-    return fail(`request failed after ${Date.now() - started} ms: ${e instanceof Error ? e.name : "unknown"}`, "The photo reader did not answer in time. Try again.");
+  for (let attempt = 1; ; attempt++) {
+    try {
+      res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": key },
+        body,
+        signal: AbortSignal.timeout(Math.max(1_000, deadline - Date.now())),
+      });
+    } catch (e) {
+      return fail(`request failed after ${Date.now() - started} ms (attempt ${attempt}): ${e instanceof Error ? e.name : "unknown"}`, "The photo reader did not answer in time. Try again.");
+    }
+    const pause = RETRY_PAUSES_MS[attempt - 1];
+    if ((res.status !== 503 && res.status !== 500) || pause === undefined || Date.now() + pause > deadline - 10_000) break;
+    console.warn(`photo import: Gemini ${res.status} on attempt ${attempt}, retrying in ${pause} ms`);
+    await res.body?.cancel();
+    await new Promise((r) => setTimeout(r, pause));
   }
   if (!res.ok) {
     // Google's error message (never the image or the model's text) says what is wrong: key, model, quota
@@ -134,6 +147,7 @@ export async function readNotebookPhoto(form: FormData): Promise<PhotoReadResult
       : res.status === 404 ? `The Gemini model "${model}" was not found. Set GEMINI_MODEL to a current model.`
       : res.status === 400 && /api key/i.test(detail) ? "The Gemini key was refused. Check GEMINI_API_KEY in Vercel."
       : res.status === 403 ? "The Gemini key is not allowed to use this model (check the key's project and billing)."
+      : res.status === 503 || res.status === 500 ? "Google's photo reader is overloaded right now. Wait a minute and try again."
       : `The photo reader returned an error (${res.status}). Try again.`;
     return fail(`Gemini ${res.status} (${model}, ${Date.now() - started} ms): ${detail}`, reason);
   }
