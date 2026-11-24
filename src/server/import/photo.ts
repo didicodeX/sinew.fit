@@ -12,8 +12,13 @@ import { requirePageUser } from "@/server/current-user";
 
 // Vercel rejects request bodies over 4.5 MB before the function runs
 const MAX_BYTES = 4 * 1024 * 1024;
-/** Pauses before retrying when Gemini is overloaded (503/500). */
-const RETRY_PAUSES_MS = [1_500, 4_000];
+/** Models tried, in order, when the main one stays overloaded. GEMINI_FALLBACK_MODELS (comma-separated) overrides. */
+const DEFAULT_FALLBACKS = ["gemini-flash-lite-latest", "gemini-2.5-flash"];
+function fallbackModels(main: string): string[] {
+  const custom = env.GEMINI_FALLBACK_MODELS?.split(",").map((m) => m.trim()).filter(Boolean) ?? [];
+  const list = custom.length ? custom : DEFAULT_FALLBACKS;
+  return [...new Set(list)].filter((m) => m !== main);
+}
 const TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
 const PROMPT = (today: string) => `You are reading a photo of a handwritten calisthenics training log page.
@@ -112,27 +117,48 @@ export async function readNotebookPhoto(form: FormData): Promise<PhotoReadResult
     contents: [{ role: "user", parts: [{ inline_data: { mime_type: file.type, data } }, { text: PROMPT(today) }] }],
     generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: SCHEMA },
   });
-  // Gemini answers 503 ("high demand") or 500 when Google is overloaded: retry a couple of
-  // times with a short pause, inside one overall budget so the page never waits past its own timeout.
+  // Gemini answers 503 ("high demand") or 500 when a model is overloaded. Retry the main model once,
+  // then fall back to other models (usually less busy), all inside one budget so the page never
+  // waits past its own timeout. A fallback that does not exist (404) is skipped.
+  const plan: { model: string; pauseBefore: number }[] = [
+    { model, pauseBefore: 0 },
+    { model, pauseBefore: 1_500 },
+    ...fallbackModels(model).map((m) => ({ model: m, pauseBefore: 0 })),
+  ];
   const deadline = started + 55_000;
-  let res: Response;
-  for (let attempt = 1; ; attempt++) {
+  let res: Response | undefined;
+  let used = model;
+  for (const [i, step] of plan.entries()) {
+    if (i > 0) {
+      if (Date.now() + step.pauseBefore > deadline - 10_000) break;
+      if (step.pauseBefore) await new Promise((r) => setTimeout(r, step.pauseBefore));
+    }
+    let attempt: Response;
     try {
-      res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      attempt = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(step.model)}:generateContent`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-goog-api-key": key },
         body,
         signal: AbortSignal.timeout(Math.max(1_000, deadline - Date.now())),
       });
     } catch (e) {
-      return fail(`request failed after ${Date.now() - started} ms (attempt ${attempt}): ${e instanceof Error ? e.name : "unknown"}`, "The photo reader did not answer in time. Try again.");
+      if (res) break; // an earlier overloaded answer is reported below
+      return fail(`request failed after ${Date.now() - started} ms (${step.model}): ${e instanceof Error ? e.name : "unknown"}`, "The photo reader did not answer in time. Try again.");
     }
-    const pause = RETRY_PAUSES_MS[attempt - 1];
-    if ((res.status !== 503 && res.status !== 500) || pause === undefined || Date.now() + pause > deadline - 10_000) break;
-    console.warn(`photo import: Gemini ${res.status} on attempt ${attempt}, retrying in ${pause} ms`);
-    await res.body?.cancel();
-    await new Promise((r) => setTimeout(r, pause));
+    const fallbackMissing = step.model !== model && attempt.status === 404;
+    if (fallbackMissing) {
+      console.warn(`photo import: fallback model ${step.model} not found, skipping`);
+      await attempt.body?.cancel();
+      continue;
+    }
+    await res?.body?.cancel();
+    res = attempt;
+    used = step.model;
+    if (res.status !== 503 && res.status !== 500) break;
+    console.warn(`photo import: Gemini ${res.status} on ${step.model} after ${Date.now() - started} ms, trying next`);
   }
+  if (!res) return fail("no answer from any model", "The photo reader did not answer. Try again.");
+  if (res.ok && used !== model) console.info(`photo import: answered by fallback model ${used}`);
   if (!res.ok) {
     // Google's error message (never the image or the model's text) says what is wrong: key, model, quota
     const detail = await res.text().then((t) => {
@@ -149,7 +175,7 @@ export async function readNotebookPhoto(form: FormData): Promise<PhotoReadResult
       : res.status === 403 ? "The Gemini key is not allowed to use this model (check the key's project and billing)."
       : res.status === 503 || res.status === 500 ? "Google's photo reader is overloaded right now. Wait a minute and try again."
       : `The photo reader returned an error (${res.status}). Try again.`;
-    return fail(`Gemini ${res.status} (${model}, ${Date.now() - started} ms): ${detail}`, reason);
+    return fail(`Gemini ${res.status} (${used}, ${Date.now() - started} ms): ${detail}`, reason);
   }
 
   let text = "";
