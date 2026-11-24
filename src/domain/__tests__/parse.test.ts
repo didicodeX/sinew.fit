@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clockDurationMinutes, extractWeightKg, formatDuration, parseRest, parseValueList } from "../parse";
+import { clockDurationMinutes, parseClockTime, extractWeightKg, formatDuration, parseRest, parseValueList } from "../parse";
 
 describe("parseValueList", () => {
   it.each([
@@ -62,5 +62,29 @@ describe("clock + weight helpers", () => {
   it("formats durations", () => {
     expect(formatDuration(95)).toBe("1:35");
     expect(formatDuration(5)).toBe("0:05");
+  });
+});
+
+describe("notebook shorthand", () => {
+  it("reads seconds written apart from the number", () => {
+    expect(parseValueList("10 s", "sec")).toEqual({ values: [10], warnings: [] });
+    expect(parseValueList("20 20 18 sec", "sec").values).toEqual([20, 20, 18]);
+    expect(parseValueList("5 reps").values).toEqual([5]);
+  });
+
+  it("reads a bare hour and other clock styles", () => {
+    expect(parseClockTime("7")).toBe(420);
+    expect(parseClockTime("7h")).toBe(420);
+    expect(parseClockTime("7:40")).toBe(460);
+    expect(parseClockTime("7.40")).toBe(460);
+    expect(parseClockTime("25")).toBeNull();
+    expect(parseClockTime("7:4")).toBeNull();
+  });
+
+  it("reads minute and second marks in rests", () => {
+    expect(parseRest("1'30")).toEqual({ sec: 90 });
+    expect(parseRest("2'")).toEqual({ sec: 120 });
+    expect(parseRest('90"')).toEqual({ sec: 90 });
+    expect(parseRest("2 m")).toEqual({ sec: 120 });
   });
 });

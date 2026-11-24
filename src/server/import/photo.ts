@@ -30,15 +30,17 @@ drawn next to several exercises means they are a superset. A SESSION NOTES box s
 of the second page. The photo may show both pages, one page, or another paper log with a similar idea.
 
 Return every session you can see, in reading order. For each:
-- date: ISO YYYY-MM-DD. Dates are usually written day first (22/10 = 22 October). If the year is
-  missing, use the latest year that does not put the date after ${today}. Empty string if no date is visible.
+- date: ISO YYYY-MM-DD. This notebook writes dates YEAR FIRST: year.month.day with a 2-digit year
+  (26.11.19 = 2026-11-19, never 26 November 2019). If only two parts are written they are month.day;
+  use the latest year that does not put the date after ${today}. Empty string if no date is visible.
 - dateText: the date exactly as written.
-- start, end: clock times as HH:MM (24h), empty if not written.
+- start, end: clock times as HH:MM (24h); a bare hour like "7" means 07:00. Empty if not written.
 - sessionNotes: the SESSION NOTES text.
 - continuesPrevious: true only if this page has no header/date and continues a session from an earlier page.
 - exercises, in order. name as written (fix obvious spelling only). reps: one value per filled set,
   separated by single spaces, e.g. "5 5 5" or "20 20 18". Never merge digits from different set boxes.
-  unit "sec" when the values are hold times in seconds (write m:ss values as seconds), else "reps".
+  unit "sec" when the values are hold times in seconds ("s" after a number means seconds; write m:ss
+  values as seconds and leave the "s" out of reps), else "reps".
   rest and breakAfter as written (e.g. "1:30", "2 min"). notes as written, including any load like "+10 kg".
   superset: the letter of the group (A, B...) when bracketed or lettered, else empty.
 - uncertainFields: list the fields you could not read confidently (handwriting confusions such as

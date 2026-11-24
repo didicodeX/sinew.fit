@@ -5,6 +5,7 @@
  */
 import { isValidIsoDate } from "./dates";
 import { normalizeExerciseName } from "./exercise-matching";
+import { parseClockTime } from "./parse";
 import type { QuickBlock, QuickDraft } from "./quick-entry";
 
 /** Fields the model may flag as hard to read. */
@@ -56,6 +57,24 @@ export function tidyValues(raw: string): string {
     .trim();
 }
 
+/** "7" → "07:00", "7h40" → "07:40"; anything unreadable is kept as written for the person to fix. */
+function tidyClock(raw: string): string {
+  const mins = parseClockTime(raw);
+  return mins === null ? raw : `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+}
+
+/**
+ * The notebook writes dates year first: "26.11.19" = 2026-11-19 (also "2026/11/19", "26-11-19").
+ * Returns the ISO date, or "" when the text is not in that shape. Read in code, not trusted to the model.
+ */
+export function dateFromWritten(text: string): string {
+  const m = /^(\d{2}|\d{4})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{1,2})$/.exec(text.trim());
+  if (!m) return "";
+  const y = m[1]!.length === 2 ? 2000 + Number(m[1]) : Number(m[1]);
+  const iso = `${y}-${m[2]!.padStart(2, "0")}-${m[3]!.padStart(2, "0")}`;
+  return isValidIsoDate(iso) ? iso : "";
+}
+
 /**
  * Validate and clean the model's JSON (never trusted as-is). Unknown shapes give an empty list.
  * `photo` is the index of the photo the output came from.
@@ -87,12 +106,14 @@ export function cleanPhotoRead(raw: unknown, photo: number): PhotoSession[] {
         },
       ];
     });
-    const date = str(o.date, 10);
+    const dateText = str(o.dateText, 40);
+    const read = str(o.date, 10);
+    const date = dateFromWritten(dateText) || (isValidIsoDate(read) ? read : "");
     const session: PhotoSession = {
-      date: isValidIsoDate(date) ? date : "",
-      dateText: str(o.dateText, 40),
-      start: str(o.start, 8),
-      end: str(o.end, 8),
+      date,
+      dateText,
+      start: tidyClock(str(o.start, 8)),
+      end: tidyClock(str(o.end, 8)),
       sessionNotes: str(o.sessionNotes, 2000),
       continuesPrevious: o.continuesPrevious === true,
       uncertain: flags(o.uncertainFields, SESSION_FIELDS),

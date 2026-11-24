@@ -34,7 +34,9 @@ export function parseValueList(input: string, unit: "reps" | "sec" = "reps"): Va
     .toLowerCase()
     .split(/[\s,;/x×*]+/)
     .map((t) => t.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    // A unit written apart from its number ("10 s", "20 sec", "5 reps") is not a value
+    .filter((t) => !/^(s|sec|secs|seconds?|reps?)$/.test(t));
 
   if (/^\s*\d+\s*[x×*]\s*\d+\s*$/i.test(raw)) {
     warnings.push({
@@ -50,7 +52,7 @@ export function parseValueList(input: string, unit: "reps" | "sec" = "reps"): Va
       values.push(clock);
       continue;
     }
-    const m = /^(\d+(?:\.\d+)?)(s|sec|secs)?$/.exec(token);
+    const m = /^(\d+(?:\.\d+)?)(s|sec|secs|seconds?|reps?)?$/.exec(token);
     if (!m) {
       warnings.push({ code: "unparseable", message: `Could not read "${token}"` });
       continue;
@@ -82,7 +84,12 @@ export interface RestRange {
  * A bare number is seconds, except when ≤ 10 and followed by a minute unit.
  */
 export function parseRest(input: string): RestRange | null {
-  const s = input.trim().toLowerCase().replace(/–|—/g, "-");
+  const s = input
+    .trim()
+    .toLowerCase()
+    .replace(/–|—/g, "-")
+    .replace(/(\d)\s*(?:''|"|″)/g, "$1s") // 90" = 90 seconds
+    .replace(/(\d)\s*['’′]/g, "$1m"); // 1'30 = 1 min 30, 2' = 2 min
   if (!s) return null;
 
   const clock = parseClockDuration(s);
@@ -105,12 +112,12 @@ export function parseRest(input: string): RestRange | null {
   return null;
 }
 
-/** "12:40" or "12h40" → minutes since midnight. */
+/** "12:40", "12h40", "12.40", or a bare hour "7" / "7h" (= 07:00) → minutes since midnight. */
 export function parseClockTime(input: string): number | null {
-  const m = /^(\d{1,2})[:h](\d{2})$/.exec(input.trim().toLowerCase());
+  const m = /^(\d{1,2})(?:\s*[:h.]\s*(\d{2})?)?$/.exec(input.trim().toLowerCase());
   if (!m) return null;
   const h = Number(m[1]);
-  const min = Number(m[2]);
+  const min = Number(m[2] ?? 0);
   if (h > 23 || min > 59) return null;
   return h * 60 + min;
 }

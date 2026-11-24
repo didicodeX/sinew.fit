@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildQuickSession } from "../quick-entry";
-import { cleanPhotoRead, duplicateDates, groupPages, photoExerciseNames, photoToDraft, tidyValues } from "../photo-import";
+import { cleanPhotoRead, dateFromWritten, duplicateDates, groupPages, photoExerciseNames, photoToDraft, tidyValues } from "../photo-import";
 import type { ExerciseDef } from "../types";
 
 const EX: ExerciseDef[] = [
@@ -96,5 +96,25 @@ describe("helpers", () => {
     const b = cleanPhotoRead(page1, 1);
     expect(photoExerciseNames([...a, ...b]).map((n) => [n.name, n.count])).toEqual([["Pull ups", 2], ["Dead hang", 2]]);
     expect(duplicateDates([...a, ...b])).toEqual(["2026-10-22"]);
+  });
+});
+
+describe("notebook conventions", () => {
+  it("reads written dates year first, overriding the model", () => {
+    expect(dateFromWritten("26.11.19")).toBe("2026-11-19");
+    expect(dateFromWritten("2026/11/19")).toBe("2026-11-19");
+    expect(dateFromWritten("26-1-5")).toBe("2026-01-05");
+    expect(dateFromWritten("26.13.19")).toBe("");
+    expect(dateFromWritten("22/10")).toBe("");
+    const [s] = cleanPhotoRead({ sessions: [{ date: "2019-11-26", dateText: "26.11.19", exercises: [{ name: "Dips", reps: "8" }] }] }, 0);
+    expect(s!.date).toBe("2026-11-19");
+  });
+
+  it("tidies a bare hour and accepts seconds written apart", () => {
+    const [s] = cleanPhotoRead({ sessions: [{ date: "2026-11-19", start: "7", end: "13:17", exercises: [{ name: "Dead hang", reps: "10 s", unit: "sec" }] }] }, 0);
+    expect(s!.start).toBe("07:00");
+    const r = buildQuickSession(photoToDraft(s!, () => "hang"), EX, () => "id");
+    expect([...r.warnings.values()].flat()).toEqual([]);
+    expect(r.session.entries[0]!.sets.map((x) => x.value)).toEqual([10]);
   });
 });
